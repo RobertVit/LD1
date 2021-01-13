@@ -1,0 +1,1292 @@
+************************************************************************
+*  Description.......: Perform the namespace conversion (e.g. /DBM/ -> /DBE/) in the Z development objects
+*
+*  Author............: Mariusz Kakol
+*  Company...........: Proaxia
+*  Creation Date.....: 2019.11.27
+*
+************************************************************************
+*  Changed on:  Changed by:   Change ID:  Description:
+*
+*  2019.11.27   M.Kakol                   First ver.
+************************************************************************
+REPORT zdbet_conv_nspac_zdev.
+*
+*TABLES:
+*  tadir.
+*
+*SELECTION-SCREEN BEGIN OF BLOCK bk1 WITH FRAME TITLE TEXT-001.
+*  SELECT-OPTIONS:
+*    s_devcls FOR tadir-devclass OBLIGATORY DEFAULT 'ZDBME_ZKAM',
+*    s_object FOR tadir-object,
+*    s_objnam FOR tadir-obj_name.
+*SELECTION-SCREEN END OF BLOCK bk1.
+*
+*SELECTION-SCREEN BEGIN OF BLOCK bk3 WITH FRAME TITLE TEXT-003.
+*  PARAMETERS:
+*    p_actcon RADIOBUTTON GROUP act DEFAULT 'X',
+*    p_actcof AS CHECKBOX,
+*    p_actosy RADIOBUTTON GROUP act.
+*SELECTION-SCREEN END OF BLOCK bk3.
+*
+*SELECTION-SCREEN BEGIN OF BLOCK bk2 WITH FRAME TITLE TEXT-002.
+*  PARAMETERS:
+*    p_dest   TYPE rfcdisplay-rfcdest DEFAULT 'AHD',
+*    p_trkorr TYPE e071-trkorr OBLIGATORY DEFAULT 'V1DK900805',
+*    p_test   AS CHECKBOX DEFAULT 'X'.
+*SELECTION-SCREEN END OF BLOCK bk2.
+*
+*SELECTION-SCREEN BEGIN OF BLOCK bk7 WITH FRAME TITLE TEXT-007.
+*  SELECTION-SCREEN BEGIN OF LINE.
+*    PARAMETERS:
+*      p_maps00 TYPE text50 DEFAULT '/DBME/ZKAM1',
+*      p_mapd00 TYPE text50 DEFAULT '/DBME/ZKAM2'.
+*  SELECTION-SCREEN END OF LINE.
+*  SELECTION-SCREEN BEGIN OF LINE.
+*    PARAMETERS:
+*      p_maps01 TYPE text50,
+*      p_mapd01 TYPE text50.
+*  SELECTION-SCREEN END OF LINE.
+*  SELECTION-SCREEN BEGIN OF LINE.
+*    PARAMETERS:
+*      p_maps02 TYPE text50,
+*      p_mapd02 TYPE text50.
+*  SELECTION-SCREEN END OF LINE.
+*  SELECTION-SCREEN BEGIN OF LINE.
+*    PARAMETERS:
+*      p_maps03 TYPE text50,
+*      p_mapd03 TYPE text50.
+*  SELECTION-SCREEN END OF LINE.
+*  SELECTION-SCREEN BEGIN OF LINE.
+*    PARAMETERS:
+*      p_maps04 TYPE text50,
+*      p_mapd04 TYPE text50.
+*  SELECTION-SCREEN END OF LINE.
+*  SELECTION-SCREEN BEGIN OF LINE.
+*    PARAMETERS:
+*      p_maps05 TYPE text50,
+*      p_mapd05 TYPE text50.
+*  SELECTION-SCREEN END OF LINE.
+*  SELECTION-SCREEN BEGIN OF LINE.
+*    PARAMETERS:
+*      p_maps06 TYPE text50,
+*      p_mapd06 TYPE text50.
+*  SELECTION-SCREEN END OF LINE.
+*  SELECTION-SCREEN BEGIN OF LINE.
+*    PARAMETERS:
+*      p_maps07 TYPE text50,
+*      p_mapd07 TYPE text50.
+*  SELECTION-SCREEN END OF LINE.
+*  SELECTION-SCREEN BEGIN OF LINE.
+*    PARAMETERS:
+*      p_maps08 TYPE text50,
+*      p_mapd08 TYPE text50.
+*  SELECTION-SCREEN END OF LINE.
+*  SELECTION-SCREEN BEGIN OF LINE.
+*    PARAMETERS:
+*      p_maps09 TYPE text50,
+*      p_mapd09 TYPE text50.
+*  SELECTION-SCREEN END OF LINE.
+*SELECTION-SCREEN END OF BLOCK bk7.
+*
+*SELECTION-SCREEN BEGIN OF BLOCK bk4 WITH FRAME TITLE TEXT-004.
+*  PARAMETERS:
+*    p_trc_ln RADIOBUTTON GROUP trl,
+*    p_trc_lc RADIOBUTTON GROUP trl DEFAULT 'X',
+*    p_trc_la RADIOBUTTON GROUP trl.
+*SELECTION-SCREEN END OF BLOCK bk4.
+*SELECTION-SCREEN BEGIN OF BLOCK bk5 WITH FRAME TITLE TEXT-005.
+*  PARAMETERS:
+*    p_trc_ol RADIOBUTTON GROUP tro,
+*    p_trc_or RADIOBUTTON GROUP tro DEFAULT 'X',
+*    p_trc_ob RADIOBUTTON GROUP tro.
+*SELECTION-SCREEN END OF BLOCK bk5.
+*SELECTION-SCREEN BEGIN OF BLOCK bk6 WITH FRAME TITLE TEXT-006.
+*  PARAMETERS:
+*    p_trc_da RADIOBUTTON GROUP trd DEFAULT 'X',
+*    p_trc_di RADIOBUTTON GROUP trd,
+*    p_trc_df RADIOBUTTON GROUP trd.
+*SELECTION-SCREEN END OF BLOCK bk6.
+*
+*************************************************************************
+**  Description.......: Application exception
+**
+**  Author............: Mariusz Kakol
+**  Company...........: Proaxia
+**  Creation Date.....: 2019.11.27
+**
+*************************************************************************
+**  Changed on:  Changed by:   Change ID:  Description:
+**
+**  2019.11.27   M.Kakol                   First ver.
+*************************************************************************
+*CLASS lcx_exception DEFINITION INHERITING FROM cx_static_check.
+*ENDCLASS.
+*
+*************************************************************************
+**  Description.......: Application Controller definition
+**
+**  Author............: Mariusz Kakol
+**  Company...........: Proaxia
+**  Creation Date.....: 2019.11.27
+**
+*************************************************************************
+**  Changed on:  Changed by:   Change ID:  Description:
+**
+**  2019.11.27   M.Kakol                   First ver.
+*************************************************************************
+*CLASS lcl_app_controller DEFINITION.
+*  PUBLIC SECTION.
+*    METHODS main.
+*
+*  PRIVATE SECTION.
+*    TYPES:
+*      BEGIN OF mtyp_str_package_data,
+*        package         TYPE tadir-devclass,
+*        o_abapgit_repo  TYPE REF TO zcl_abapgit_repo_offline,
+*        o_abapgit_log   TYPE REF TO zif_abapgit_log,
+*        t_abapgit_files TYPE zif_abapgit_definitions=>ty_files_tt,
+*      END OF   mtyp_str_package_data.
+*    TYPES:
+*      BEGIN OF mtyp_str_name_mapping,
+*        name_src TYPE text50,
+*        name_dst TYPE text50,
+*      END OF mtyp_str_name_mapping .
+*    TYPES:
+*      mtyp_tab_name_mapping TYPE STANDARD TABLE OF mtyp_str_name_mapping WITH NON-UNIQUE DEFAULT KEY .
+*    TYPES:
+*      mtyp_mapping_sorted TYPE c LENGTH 1 .
+*    TYPES:
+*      mtyp_prefix_tmp TYPE c LENGTH 44 .
+*    TYPES:
+*      BEGIN OF mtyp_str_value_mapping,
+*        name_src        TYPE text50,
+*        name_src_length TYPE i,
+*        name_dst        TYPE text50,
+*        name_tmp        TYPE mtyp_prefix_tmp,
+*      END OF mtyp_str_value_mapping .
+*    TYPES:
+*      mtyp_tab_value_mapping TYPE STANDARD TABLE OF mtyp_str_value_mapping WITH NON-UNIQUE DEFAULT KEY .
+*
+*    METHODS init.
+*    METHODS mapping_get_sel_screen.
+*    METHODS mapping_read_file_front.
+*    METHODS mapping_prepare.
+*    METHODS show_log.
+*    METHODS set_org_sys
+*      RAISING lcx_exception.
+*    METHODS data_read
+*      RAISING lcx_exception.
+*    METHODS data_read_single
+*      IMPORTING
+*                is_tadir TYPE tadir
+*      RAISING   lcx_exception.
+*    METHODS data_process
+*      RAISING lcx_exception.
+*    METHODS data_process_package
+*      IMPORTING
+*                iv_package TYPE tadir-devclass
+*      RAISING   lcx_exception.
+*    METHODS data_delete_local_single
+*      IMPORTING
+*                is_tadir TYPE tadir
+*      RAISING   lcx_exception.
+*    METHODS serialize_single
+*      IMPORTING
+*                is_tadir        TYPE tadir
+*                iv_local        TYPE abap_bool
+*      EXPORTING
+*                es_abapgit_item TYPE zcl_abapgit_objects=>ty_serialization
+*      CHANGING
+*                cv_delete_local TYPE abap_bool
+*      RAISING   lcx_exception.
+*    METHODS replace_namespace_str
+*      IMPORTING
+*        iv_replace         TYPE abap_bool
+*      EXPORTING
+*        ev_changed         TYPE abap_bool
+*        ev_contains_src_id TYPE abap_bool
+*        ev_contains_dst_id TYPE abap_bool
+*      CHANGING
+*        cv_data            TYPE string.
+*    METHODS trace_xml
+*      IMPORTING
+*        is_tadir    TYPE tadir
+*        iv_filename TYPE clike
+*        iv_local    TYPE abap_bool
+*        iv_data     TYPE string.
+*    METHODS gen_prefix_tmp
+*      RETURNING
+*        VALUE(rv_result) TYPE mtyp_prefix_tmp .
+*
+*    DATA:
+*      mt_mapping_names  TYPE mtyp_tab_name_mapping,
+*      mt_mapping_values TYPE mtyp_tab_value_mapping,
+*      mo_log            TYPE REF TO if_reca_message_list,
+*      mt_package_data   TYPE SORTED TABLE OF mtyp_str_package_data WITH UNIQUE KEY package.
+*
+*ENDCLASS.
+*
+*************************************************************************
+**  Description.......: Application exception implementation
+**
+**  Author............: Mariusz Kakol
+**  Company...........: Proaxia
+**  Creation Date.....: 2019.11.27
+**
+*************************************************************************
+**  Changed on:  Changed by:   Change ID:  Description:
+**
+**  2019.11.27   M.Kakol                   First ver.
+*************************************************************************
+*CLASS lcx_exception IMPLEMENTATION.
+*ENDCLASS.
+*
+*************************************************************************
+**  Description.......: Application Controller implementation
+**
+**  Author............: Mariusz Kakol
+**  Company...........: Proaxia
+**  Creation Date.....: 2019.11.27
+**
+*************************************************************************
+**  Changed on:  Changed by:   Change ID:  Description:
+**
+**  2019.11.27   M.Kakol                   First ver.
+*************************************************************************
+*CLASS lcl_app_controller IMPLEMENTATION.
+*************************************************************************
+**  Description.......: Initialize
+**
+**  Author............: Mariusz Kakol
+**  Company...........: Proaxia
+**  Creation Date.....: 2019.11.27
+**
+*************************************************************************
+**  Changed on:  Changed by:   Change ID:  Description:
+**
+**  2019.11.27   M.Kakol                   First ver.
+*************************************************************************
+*  METHOD init.
+*************************************************************************
+** Initialize
+*************************************************************************
+*    CLEAR mt_package_data[].
+*    CLEAR mt_mapping_names[].
+*    CLEAR mt_mapping_values[].
+*    me->mo_log = cf_reca_message_list=>create( ).
+*
+*************************************************************************
+** Prepare the fields mapping
+*************************************************************************
+*    me->mapping_get_sel_screen( ).
+*    me->mapping_read_file_front( ).
+*    me->mapping_prepare( ).
+*
+*    IF me->mt_mapping_values[] IS INITIAL.
+*      ASSERT 1 = 2.
+*      "todo
+*    ENDIF.
+*  ENDMETHOD.
+*
+*************************************************************************
+**
+**  Description.......: Generate temporary GUID, e.g.
+**                      0~1~L~T~4~S~4~5~7~j~c~o~h~O~Y~{~K~d~W~X~0~m
+**
+**  Author............: Mariusz Kakol
+**  Company...........: Proaxia
+**  Creation Date.....: 2019.08.28
+**
+*************************************************************************
+**  Changed on:  Changed by:   Change ID:  Description:
+**
+**  2019.08.28   M.Kakol                   First ver.
+*************************************************************************
+*  METHOD gen_prefix_tmp.
+*    DATA:
+*      lv_guid22 TYPE c LENGTH 22,
+*      lv_index1 TYPE i,
+*      lv_index2 TYPE i.
+*
+*    CALL FUNCTION 'GUID_CREATE'
+*      IMPORTING
+*        ev_guid_22 = lv_guid22.
+*
+*    CLEAR rv_result.
+*    DO 22 TIMES.
+*      rv_result+lv_index2(1) = lv_guid22+lv_index1(1).
+*      ADD 1 TO lv_index1.
+*      ADD 1 TO lv_index2.
+*      rv_result+lv_index2(1) = '~'.
+*      ADD 1 TO lv_index2.
+*    ENDDO.
+*  ENDMETHOD.
+*
+*************************************************************************
+**  Description.......: Get fields mapping from the selection screen
+**
+**  Author............: Mariusz Kakol
+**  Company...........: Proaxia
+**  Creation Date.....: 2020.10.06
+**
+*************************************************************************
+**  Changed on:  Changed by:   Change ID:  Description:
+**
+**  2020.10.06   M.Kakol                   First ver.
+*************************************************************************
+*  METHOD mapping_get_sel_screen.
+*    DATA:
+*      lv_postfix       TYPE n LENGTH 2,
+*      lv_index         TYPE i,
+*      ls_mapping_names LIKE LINE OF me->mt_mapping_names[],
+*      lv_fname         TYPE fieldname.
+*
+*    FIELD-SYMBOLS:
+*      <lv_fs> LIKE p_maps00,
+*      <lv_fd> LIKE p_mapd00.
+*
+*    lv_index = 0.
+*    DO 10 TIMES.
+*      lv_postfix = lv_index.
+*      ADD 1 TO lv_index.
+*      UNASSIGN <lv_fs>.
+*      CONCATENATE 'P_MAPS' lv_postfix INTO lv_fname.
+*      ASSIGN (lv_fname) TO <lv_fs>.
+*      UNASSIGN <lv_fd>.
+*      CONCATENATE 'P_MAPD' lv_postfix INTO lv_fname.
+*      ASSIGN (lv_fname) TO <lv_fd>.
+*
+*      IF <lv_fs> IS INITIAL AND <lv_fd> IS INITIAL.
+*        CONTINUE.
+*      ENDIF.
+*      IF ( <lv_fs> IS INITIAL AND <lv_fd> IS NOT INITIAL ) OR
+*         ( <lv_fs> IS NOT INITIAL AND <lv_fd> IS INITIAL ).
+*        ASSERT 1 = 2.
+*        "todo
+*      ENDIF.
+*
+*      ls_mapping_names-name_src = <lv_fs>.
+*      ls_mapping_names-name_dst = <lv_fd>.
+*      APPEND ls_mapping_names TO me->mt_mapping_names[].
+*    ENDDO.
+*  ENDMETHOD.
+*
+*************************************************************************
+**  Description.......: Read fields mapping
+**
+**  Author............: Mariusz Kakol
+**  Company...........: Proaxia
+**  Creation Date.....: 2020.10.06
+**
+*************************************************************************
+**  Changed on:  Changed by:   Change ID:  Description:
+**
+**  2020.10.06   M.Kakol                   First ver.
+*************************************************************************
+*  METHOD mapping_read_file_front.
+*  ENDMETHOD.
+*
+*************************************************************************
+**  Description.......: Prepare fields mapping
+**
+**  Author............: Mariusz Kakol
+**  Company...........: Proaxia
+**  Creation Date.....: 2020.10.06
+**
+*************************************************************************
+**  Changed on:  Changed by:   Change ID:  Description:
+**
+**  2020.10.06   M.Kakol                   First ver.
+*************************************************************************
+*  METHOD mapping_prepare.
+*    FIELD-SYMBOLS:
+*      <ls_mapping_names>  LIKE LINE OF mt_mapping_names[],
+*      <ls_mapping_values> LIKE LINE OF mt_mapping_values[].
+*
+*    CLEAR mt_mapping_values[].
+*
+*    LOOP AT mt_mapping_names[] ASSIGNING <ls_mapping_names>.
+*      TRANSLATE <ls_mapping_names>-name_dst TO UPPER CASE.
+*      SHIFT <ls_mapping_names>-name_dst LEFT DELETING LEADING space.
+*      TRANSLATE <ls_mapping_names>-name_src TO UPPER CASE.
+*      SHIFT <ls_mapping_names>-name_src LEFT DELETING LEADING space.
+*      APPEND INITIAL LINE TO mt_mapping_values ASSIGNING <ls_mapping_values>.
+*      <ls_mapping_values>-name_dst = <ls_mapping_names>-name_dst.
+*      <ls_mapping_values>-name_src = <ls_mapping_names>-name_src.
+*    ENDLOOP.
+*
+*    LOOP AT mt_mapping_values[] ASSIGNING <ls_mapping_values>.
+*      <ls_mapping_values>-name_tmp = gen_prefix_tmp( ).
+*      <ls_mapping_values>-name_src_length = strlen( <ls_mapping_values>-name_src ).
+*    ENDLOOP.
+*
+*    SORT mt_mapping_values[] BY
+*      name_src_length DESCENDING "the longest texts on top
+*      name_src ASCENDING. "the result not to be random - sort alphabetically as the second criterion.
+*
+*  ENDMETHOD.
+*
+*************************************************************************
+**  Description.......: Data prepare.
+**
+**  Author............: Mariusz Kakol
+**  Company...........: Proaxia
+**  Creation Date.....: 2019.11.27
+**
+*************************************************************************
+**  Changed on:  Changed by:   Change ID:  Description:
+**
+**  2019.11.27   M.Kakol                   First ver.
+*************************************************************************
+*  METHOD data_read.
+*    DATA:
+*      lt_tadir TYPE STANDARD TABLE OF tadir WITH NON-UNIQUE DEFAULT KEY,
+*      lv_dummy TYPE c.
+*
+*    FIELD-SYMBOLS:
+*      <ls_tadir>        LIKE LINE OF lt_tadir[].
+*
+*************************************************************************
+** Initialize
+*************************************************************************
+*    MESSAGE i007(zdbe_tools) INTO lv_dummy.
+*    me->mo_log->add_symsg( ).
+*
+*************************************************************************
+** Read the data
+*************************************************************************
+*    CALL FUNCTION 'ZDBET_TOOLS_RFC_TADIR_RD' DESTINATION p_dest
+*      EXPORTING
+*        it_devclass_rng = s_devcls[]
+*        it_object_rng   = s_object[]
+*        it_obj_name_rng = s_objnam[]
+*      IMPORTING
+*        et_tadir        = lt_tadir[].
+*
+*************************************************************************
+** Serialize the data and do the namespace conversion
+*************************************************************************
+*    LOOP AT lt_tadir[] ASSIGNING <ls_tadir>.
+*      me->data_read_single( is_tadir = <ls_tadir> ).
+*    ENDLOOP.
+*    UNASSIGN <ls_tadir>.
+*
+*  ENDMETHOD.
+*
+*************************************************************************
+**  Description.......: Delete the given object
+**
+**  Author............: Mariusz Kakol
+**  Company...........: Proaxia
+**  Creation Date.....: 2019.11.27
+**
+*************************************************************************
+**  Changed on:  Changed by:   Change ID:  Description:
+**
+**  2019.11.27   M.Kakol                   First ver.
+*************************************************************************
+*  METHOD data_delete_local_single.
+*    DATA:
+*      lx_abapgit_exception TYPE REF TO zcx_abapgit_exception,
+*      lt_abapgit_tadir     TYPE zif_abapgit_definitions=>ty_tadir_tt,
+*      ls_abapgit_tadir     LIKE LINE OF lt_abapgit_tadir[],
+*      ls_abapgit_checks    TYPE zif_abapgit_definitions=>ty_delete_checks,
+*      lv_dummy             TYPE c.
+*
+*    FIELD-SYMBOLS:
+*      <ls_package_data>             LIKE LINE OF me->mt_package_data[].
+*
+*************************************************************************
+** Initialize
+*************************************************************************
+*    READ TABLE me->mt_package_data[] ASSIGNING <ls_package_data> WITH TABLE KEY package = is_tadir-devclass.
+*    ASSERT sy-subrc = 0.
+*
+*    MESSAGE i009(zdbe_tools) WITH is_tadir-object is_tadir-obj_name INTO lv_dummy.
+*    me->mo_log->add_symsg( ).
+*
+*************************************************************************
+** In test mode we do nothing further
+*************************************************************************
+*    IF p_test = abap_true.
+*      RETURN.
+*    ENDIF.
+*
+*************************************************************************
+** Perform the deletion
+*************************************************************************
+*    TRY.
+*        MOVE-CORRESPONDING is_tadir TO ls_abapgit_tadir.
+*        APPEND ls_abapgit_tadir TO lt_abapgit_tadir[].
+*
+*        ls_abapgit_checks-transport-required = abap_true.
+*        ls_abapgit_checks-transport-transport = p_trkorr.
+*
+*        CALL METHOD zcl_abapgit_objects=>delete
+*          EXPORTING
+*            it_tadir  = lt_abapgit_tadir[]
+*            is_checks = ls_abapgit_checks.
+*
+*      CATCH zcx_abapgit_exception INTO lx_abapgit_exception.
+*        <ls_package_data>-o_abapgit_log->add_error( lx_abapgit_exception->get_text( ) ).
+*    ENDTRY.
+*  ENDMETHOD.
+*
+*************************************************************************
+**  Description.......: Data prepare. Perform:
+**                      1. Serialization of the selected object into XML files
+**                      2. The conversion of the XML texts - replacement of the namespaces
+**
+**  Author............: Mariusz Kakol
+**  Company...........: Proaxia
+**  Creation Date.....: 2019.11.27
+**
+*************************************************************************
+**  Changed on:  Changed by:   Change ID:  Description:
+**
+**  2019.11.27   M.Kakol                   First ver.
+*************************************************************************
+*  METHOD data_read_single.
+*    DATA:
+*      lx_abapgit_exception        TYPE REF TO zcx_abapgit_exception,
+*      ls_abapgit_repo             TYPE zif_abapgit_persistence=>ty_repo,
+*      ls_package_data             LIKE LINE OF me->mt_package_data[],
+*      lt_abapgit_files            TYPE zif_abapgit_definitions=>ty_files_tt,
+*      ls_abapgit_item_local       TYPE zcl_abapgit_objects=>ty_serialization,
+*      ls_abapgit_item_remote      TYPE zcl_abapgit_objects=>ty_serialization,
+*      lv_file_string              TYPE string,
+*      lv_conversion_needed        TYPE abap_bool,
+*      lv_conversion_needed_remote TYPE abap_bool,
+*      lv_contains_dst_id          TYPE abap_bool,
+*      lv_local_contains_dst_id    TYPE abap_bool,
+*      lv_changed                  TYPE abap_bool,
+*      lv_delete_local             TYPE abap_bool,
+*      lv_dummy                    TYPE c,
+*      lv_trace                    TYPE abap_bool.
+*
+*    FIELD-SYMBOLS:
+*      <ls_package_data> LIKE LINE OF me->mt_package_data[],
+*      <ls_abapgit_file> LIKE LINE OF ls_abapgit_item_local-files[].
+*
+*************************************************************************
+** Initialize
+*************************************************************************
+*    lv_conversion_needed = abap_false.
+*
+*************************************************************************
+** Get the package data, create if not yet created
+*************************************************************************
+*    READ TABLE me->mt_package_data[] ASSIGNING <ls_package_data> WITH TABLE KEY package = is_tadir-devclass.
+*    IF sy-subrc <> 0.
+*      ls_package_data-package = is_tadir-devclass.
+*      INSERT ls_package_data INTO TABLE me->mt_package_data[] ASSIGNING <ls_package_data>.
+*    ENDIF.
+*
+*************************************************************************
+** Create the ABAP GIT Repository if not yet created
+*************************************************************************
+*    IF <ls_package_data>-o_abapgit_repo IS NOT BOUND.
+*      ls_abapgit_repo-key                         = 'DEFAULT'.
+*      ls_abapgit_repo-package                     = <ls_package_data>-package.
+*      ls_abapgit_repo-dot_abapgit                 = zcl_abapgit_dot_abapgit=>build_default( )->get_data( ).
+*      ls_abapgit_repo-dot_abapgit-starting_folder = '/'.
+*
+*      CREATE OBJECT <ls_package_data>-o_abapgit_repo
+*        EXPORTING
+*          is_data = ls_abapgit_repo.
+*      <ls_package_data>-o_abapgit_repo->create_new_log( ).
+*      <ls_package_data>-o_abapgit_log = <ls_package_data>-o_abapgit_repo->get_log( ).
+*    ENDIF.
+*
+*
+*    TRY.
+*
+*************************************************************************
+** Serialize - local version on this system
+*************************************************************************
+*        me->serialize_single(
+*          EXPORTING
+*            is_tadir = is_tadir
+*            iv_local = abap_true
+*          IMPORTING
+*            es_abapgit_item = ls_abapgit_item_local
+*          CHANGING
+*            cv_delete_local = lv_delete_local ).
+*
+*************************************************************************
+** Check if the local version contains anything to be converted
+*************************************************************************
+*        LOOP AT ls_abapgit_item_local-files[] ASSIGNING <ls_abapgit_file>.
+*          lv_file_string = zcl_abapgit_convert=>xstring_to_string_utf8( iv_data = <ls_abapgit_file>-data ).
+*          me->replace_namespace_str(
+*            EXPORTING
+*              iv_replace         = abap_true
+*            IMPORTING
+*              ev_changed         = lv_changed
+*              ev_contains_dst_id = lv_contains_dst_id
+*            CHANGING
+*              cv_data            = lv_file_string ).
+*          IF lv_changed = abap_true.
+*            "If we have replaced the namespace in the local version, then there is a need for the conversion
+*            lv_conversion_needed = abap_true.
+*          ENDIF.
+*          IF lv_contains_dst_id = abap_true.
+*            lv_local_contains_dst_id = abap_true.
+*          ENDIF.
+*        ENDLOOP.
+*        UNASSIGN <ls_abapgit_file>.
+*
+*************************************************************************
+** Serialize - remote version from the source system
+*************************************************************************
+*        me->serialize_single(
+*          EXPORTING
+*            is_tadir = is_tadir
+*            iv_local = abap_false
+*          IMPORTING
+*            es_abapgit_item = ls_abapgit_item_remote
+*          CHANGING
+*            cv_delete_local = lv_delete_local ).
+*
+*************************************************************************
+** Replace the names
+** When replacing the namespace, confirm the need of conversion
+** We do the conversion if and only if there are some occurences of our namespace to be replaced
+** Highest prio: whatever happens do not harm. Whatever happens, do not touch the objects not related
+** to our conversion
+*************************************************************************
+*        lv_conversion_needed_remote = abap_false.
+*        LOOP AT ls_abapgit_item_remote-files[] ASSIGNING <ls_abapgit_file>.
+*          lv_file_string = zcl_abapgit_convert=>xstring_to_string_utf8( iv_data = <ls_abapgit_file>-data ).
+*
+*          me->replace_namespace_str(
+*            EXPORTING
+*              iv_replace = abap_true
+*            IMPORTING
+*              ev_changed = lv_changed
+*            CHANGING
+*              cv_data = lv_file_string ).
+*          IF lv_changed = abap_true.
+*            lv_conversion_needed_remote = abap_true.
+*          ENDIF.
+*
+*          <ls_abapgit_file>-data = zcl_abapgit_convert=>string_to_xstring( iv_str = lv_file_string ).
+*          <ls_abapgit_file>-sha1 = 'DUMMY'. "set dummy checksum to force the difference
+*
+*          APPEND <ls_abapgit_file> TO lt_abapgit_files[].
+*        ENDLOOP.
+*        UNASSIGN <ls_abapgit_file>.
+*
+*        "If it looks from the local point of view, that there is something to be changed, but from the remote point of view there is nothing to be changed
+*        "Then we can hardly do the conversion. Changing the object without real change is only a risk and nothing more
+*        IF lv_conversion_needed = abap_true AND lv_conversion_needed_remote = abap_false.
+*          MESSAGE w015(zdbe_tools) WITH is_tadir-object is_tadir-obj_name INTO lv_dummy.
+*          me->mo_log->add_symsg( ).
+*          lv_conversion_needed = abap_false.
+*        ENDIF.
+*
+*        "If the remote version is relevant and the local version is not relevant
+*        "but the local version is not relevant not because it has been processed (contains the reference to the target namespace)
+*        "but it is somehow empty / has been deleted, or whatever (does not contain anything)
+*        "then the object is relevant for the conversion
+*        IF lv_conversion_needed_remote = abap_true AND lv_local_contains_dst_id = abap_false.
+*          lv_conversion_needed = abap_true.
+*        ENDIF.
+*
+*        "If the update is forced, then we say, that the conversion is needed
+*        "It can be the case, that there is nothing to be converted, but still we want to recreate the objects
+*        "Example:
+*        "1. We had to delete the maintenance view and the corresponding function group
+*        "  (because there was a primary key conflict)
+*        "  TOBJ objects must be recreated. These TOBJs are Z objects. They have nothing to do with our namespace changing
+*        "  But still they have to be recreated
+*
+*        IF p_actcof = abap_true.
+*          lv_conversion_needed = abap_true.
+*        ENDIF.
+*
+*************************************************************************
+** Trace the files
+*************************************************************************
+*        lv_trace = abap_false.
+*        CASE abap_true.
+*          WHEN p_trc_lc.
+*            IF lv_conversion_needed = abap_true.
+*              lv_trace = abap_true.
+*            ENDIF.
+*          WHEN p_trc_la.
+*            lv_trace = abap_true.
+*        ENDCASE.
+*        IF lv_trace = abap_true.
+*          IF p_trc_ol = abap_true OR p_trc_ob = abap_true.
+*            LOOP AT ls_abapgit_item_local-files[] ASSIGNING <ls_abapgit_file>.
+*              lv_file_string = zcl_abapgit_convert=>xstring_to_string_utf8( iv_data = <ls_abapgit_file>-data ).
+*              me->trace_xml(
+*                is_tadir     = is_tadir
+*                iv_filename  = <ls_abapgit_file>-filename
+*                iv_local     = abap_true
+*                iv_data      = lv_file_string ).
+*            ENDLOOP.
+*            UNASSIGN <ls_abapgit_file>.
+*          ENDIF.
+*          IF p_trc_or = abap_true OR p_trc_ob = abap_true.
+*            LOOP AT ls_abapgit_item_remote-files[] ASSIGNING <ls_abapgit_file>.
+*              lv_file_string = zcl_abapgit_convert=>xstring_to_string_utf8( iv_data = <ls_abapgit_file>-data ).
+*              me->trace_xml(
+*                is_tadir     = is_tadir
+*                iv_filename  = <ls_abapgit_file>-filename
+*                iv_local     = abap_false
+*                iv_data      = lv_file_string ).
+*            ENDLOOP.
+*            UNASSIGN <ls_abapgit_file>.
+*          ENDIF.
+*        ENDIF.
+*
+*************************************************************************
+** Add the files to be processed
+*************************************************************************
+*        IF lv_conversion_needed = abap_true.
+*          MESSAGE i005(zdbe_tools) WITH is_tadir-object is_tadir-obj_name INTO lv_dummy.
+*          me->mo_log->add_symsg( ).
+*          APPEND LINES OF lt_abapgit_files[] TO <ls_package_data>-t_abapgit_files[].
+*        ENDIF.
+*
+*************************************************************************
+** If the local object must be deleted locally before updating, then delete it
+*************************************************************************
+*        IF lv_delete_local = abap_true AND
+*           lv_conversion_needed = abap_true.
+*
+*          me->data_delete_local_single(
+*            EXPORTING
+*              is_tadir = is_tadir ).
+*        ENDIF.
+*
+*      CATCH zcx_abapgit_exception INTO lx_abapgit_exception.
+*        <ls_package_data>-o_abapgit_log->add_error( lx_abapgit_exception->get_text( ) ).
+*    ENDTRY.
+*
+*  ENDMETHOD.
+*
+*************************************************************************
+**  Description.......: Serialize the given object
+**
+**  Author............: Mariusz Kakol
+**  Company...........: Proaxia
+**  Creation Date.....: 2019.11.27
+**
+*************************************************************************
+**  Changed on:  Changed by:   Change ID:  Description:
+**
+**  2019.11.27   M.Kakol                   First ver.
+*************************************************************************
+*  METHOD serialize_single.
+*    DATA:
+*      lx_abapgit_exception TYPE REF TO zcx_abapgit_exception,
+*      ls_abapgit_item      TYPE zcl_abapgit_objects=>ty_serialization,
+*      lv_abapgit_item_str  TYPE string,
+*      lv_result            TYPE abap_bool,
+*      lv_exception_text    TYPE string,
+*      lv_delete_local      TYPE abap_bool.
+*
+*    FIELD-SYMBOLS:
+*      <ls_package_data>             LIKE LINE OF me->mt_package_data[].
+*
+*************************************************************************
+** Initialize
+*************************************************************************
+*    CLEAR es_abapgit_item.
+*    READ TABLE me->mt_package_data[] ASSIGNING <ls_package_data> WITH TABLE KEY package = is_tadir-devclass.
+*    ASSERT sy-subrc = 0.
+*
+*************************************************************************
+** Serialize object
+*************************************************************************
+*    TRY.
+*        IF iv_local = abap_true.
+*          CALL METHOD zcl_dbe_tools=>abapgit_serialize
+*            EXPORTING
+*              iv_tadir_object   = is_tadir-object
+*              iv_tadir_obj_name = is_tadir-obj_name
+*              iv_devclass       = is_tadir-devclass
+*              iv_spras          = sy-langu
+*            IMPORTING
+*              es_abapgit_item   = es_abapgit_item
+*            CHANGING
+*              cv_delete_local   = cv_delete_local.
+*        ELSE.
+*          CALL FUNCTION 'ZDBET_TOOLS_RFC_ABAPGIT_SER' DESTINATION p_dest
+*            EXPORTING
+*              iv_tadir_devclass = is_tadir-devclass
+*              iv_tadir_object   = is_tadir-object
+*              iv_tadir_obj_name = is_tadir-obj_name
+*              iv_spras          = sy-langu
+*            IMPORTING
+*              ev_abapgit_item   = lv_abapgit_item_str
+*              ev_exception_text = lv_exception_text
+*              ev_delete_local   = lv_delete_local
+*              ev_result         = lv_result.
+*
+*          IF lv_result = abap_true.
+*            CALL TRANSFORMATION id SOURCE XML lv_abapgit_item_str RESULT data = es_abapgit_item.
+*            IF lv_delete_local = abap_true.
+*              cv_delete_local = abap_true.
+*            ENDIF.
+*          ELSE.
+*            zcx_abapgit_exception=>raise( lv_exception_text ).
+*          ENDIF.
+*        ENDIF.
+*      CATCH zcx_abapgit_exception INTO lx_abapgit_exception.
+*        <ls_package_data>-o_abapgit_log->add_error( lx_abapgit_exception->get_text( ) ).
+*        RAISE EXCEPTION TYPE lcx_exception.
+*    ENDTRY.
+*
+*  ENDMETHOD.
+*
+*************************************************************************
+**  Description.......: Data process - perform the deserialization of the objects
+**                      belonging to the given package
+**                      (update the development objects based on the XML files)
+**
+**  Author............: Mariusz Kakol
+**  Company...........: Proaxia
+**  Creation Date.....: 2020.10.06
+**
+*************************************************************************
+**  Changed on:  Changed by:   Change ID:  Description:
+**
+**  2020.10.06   M.Kakol                   First ver.
+*************************************************************************
+*  METHOD data_process_package.
+*    DATA:
+*      lx_abapgit_exception TYPE REF TO zcx_abapgit_exception,
+*      ls_abapgit_checks    TYPE zif_abapgit_definitions=>ty_deserialize_checks,
+*      lv_dummy             TYPE c.
+*
+*    FIELD-SYMBOLS:
+*      <ls_package_data>             LIKE LINE OF me->mt_package_data[],
+*      <ls_abapgit_checks_overwrite> LIKE LINE OF ls_abapgit_checks-overwrite[].
+*
+*************************************************************************
+** Initialize
+*************************************************************************
+*    READ TABLE me->mt_package_data[] ASSIGNING <ls_package_data> WITH TABLE KEY package = iv_package.
+*    ASSERT sy-subrc = 0.
+*
+*    MESSAGE i004(zdbe_tools) WITH iv_package INTO lv_dummy.
+*    me->mo_log->add_symsg( ).
+*
+*************************************************************************
+** In test mode we do nothing further
+*************************************************************************
+*    IF p_test = abap_true.
+*      RETURN.
+*    ENDIF.
+*
+*    TRY.
+*************************************************************************
+** Pass the files to the repository
+*************************************************************************
+*        <ls_package_data>-o_abapgit_repo->set_files_remote( it_files = <ls_package_data>-t_abapgit_files[] ).
+*
+*************************************************************************
+** Prepare the data
+*************************************************************************
+*        ls_abapgit_checks = <ls_package_data>-o_abapgit_repo->deserialize_checks( ).
+*        ls_abapgit_checks-transport-transport = p_trkorr.
+*
+*        LOOP AT ls_abapgit_checks-overwrite[] ASSIGNING <ls_abapgit_checks_overwrite>.
+*          <ls_abapgit_checks_overwrite>-decision = 'Y'.
+*        ENDLOOP.
+*        UNASSIGN <ls_abapgit_checks_overwrite>.
+*
+*************************************************************************
+** Perform the deserialization - update the objects
+*************************************************************************
+*        zcl_abapgit_objects=>deserialize(
+*          io_repo   = <ls_package_data>-o_abapgit_repo
+*          is_checks = ls_abapgit_checks
+*          ii_log    = <ls_package_data>-o_abapgit_log ).
+*
+*      CATCH zcx_abapgit_exception INTO lx_abapgit_exception.
+*        <ls_package_data>-o_abapgit_log->add_error( lx_abapgit_exception->get_text( ) ).
+*    ENDTRY.
+*  ENDMETHOD.
+*
+*************************************************************************
+**  Description.......: Data process
+**
+**  Author............: Mariusz Kakol
+**  Company...........: Proaxia
+**  Creation Date.....: 2019.11.27
+**
+*************************************************************************
+**  Changed on:  Changed by:   Change ID:  Description:
+**
+**  2019.11.27   M.Kakol                   First ver.
+*************************************************************************
+*  METHOD data_process.
+*    FIELD-SYMBOLS:
+*      <ls_package_data> LIKE LINE OF me->mt_package_data[].
+*
+*************************************************************************
+** Iterate through the packages
+** Process the packages one after another
+*************************************************************************
+*    LOOP AT me->mt_package_data[] ASSIGNING <ls_package_data>.
+*      me->data_process_package( iv_package = <ls_package_data>-package ).
+*    ENDLOOP.
+*    UNASSIGN <ls_package_data>.
+*
+*  ENDMETHOD.
+*
+*************************************************************************
+**  Description.......: Show log
+**
+**  Author............: Mariusz Kakol
+**  Company...........: Proaxia
+**  Creation Date.....: 2019.11.27
+**
+*************************************************************************
+**  Changed on:  Changed by:   Change ID:  Description:
+**
+**  2019.11.27   M.Kakol                   First ver.
+*************************************************************************
+*  METHOD show_log.
+*    DATA:
+*      ls_display_profile TYPE bal_s_prof,
+*      lt_bal_logh        TYPE bal_t_logh,
+*      lv_bal_logh        LIKE LINE OF lt_bal_logh[].
+*
+*    APPEND me->mo_log->get_handle( ) TO lt_bal_logh[].
+*
+*    CALL FUNCTION 'BAL_DSP_PROFILE_NO_TREE_GET'
+*      IMPORTING
+*        e_s_display_profile = ls_display_profile
+*      EXCEPTIONS
+*        OTHERS              = 1.
+*    IF sy-subrc <> 0.
+*      "Assume this will be successfull
+*      RETURN.
+*    ENDIF.
+*
+*    ls_display_profile-disvariant-report = sy-repid.
+*
+*    CALL FUNCTION 'BAL_DSP_LOG_DISPLAY'
+*      EXPORTING
+*        i_t_log_handle      = lt_bal_logh[]
+*        i_s_display_profile = ls_display_profile
+*      EXCEPTIONS
+*        OTHERS              = 1.
+*    IF sy-subrc <> 0.
+*      "Assume it will be successfull
+*      RETURN.
+*    ENDIF.
+*
+*    me->mo_log->clear( ).
+*  ENDMETHOD.                    "show_log
+*
+*************************************************************************
+**  Description.......: Set the original system.
+**
+**  Author............: Mariusz Kakol
+**  Company...........: Proaxia
+**  Creation Date.....: 2019.11.27
+**
+*************************************************************************
+**  Changed on:  Changed by:   Change ID:  Description:
+**
+**  2019.11.27   M.Kakol                   First ver.
+*************************************************************************
+*  METHOD set_org_sys.
+*    DATA:
+*      lv_dummy TYPE c.
+*
+*    MESSAGE i008(zdbe_tools) INTO lv_dummy.
+*    me->mo_log->add_symsg( ).
+*
+*    IF p_test = abap_false.
+**      UPDATE tadir
+**        SET srcsystem = sy-sysid
+**          WHERE
+**            devclass IN s_devcls[].
+*    ENDIF.
+*  ENDMETHOD.
+*************************************************************************
+**  Description.......: Main routine
+**
+**  Author............: Mariusz Kakol
+**  Company...........: Proaxia
+**  Creation Date.....: 2019.11.27
+**
+*************************************************************************
+**  Changed on:  Changed by:   Change ID:  Description:
+**
+**  2019.11.27   M.Kakol                   First ver.
+*************************************************************************
+*  METHOD main.
+*    DATA:
+*      lt_abapgit_msg TYPE zif_abapgit_log=>tty_log_out,
+*      lv_text200     TYPE c LENGTH 200,
+*      lv_dummy       TYPE c.
+*
+*    FIELD-SYMBOLS:
+*      <ls_package_data> LIKE LINE OF me->mt_package_data[],
+*      <ls_abapgit_msg>  LIKE LINE OF lt_abapgit_msg[].
+*
+*************************************************************************
+** Initialize
+*************************************************************************
+*    me->init( ).
+*
+*    IF p_test = abap_true.
+*      MESSAGE w006(zdbe_tools) INTO lv_dummy.
+*      me->mo_log->add_symsg( ).
+*    ENDIF.
+*
+*
+*    TRY.
+*        CASE abap_true.
+*          WHEN p_actcon.
+*            me->data_read( ).
+*            me->data_process( ).
+*
+*          WHEN p_actosy.
+*            me->set_org_sys( ).
+*
+*          WHEN OTHERS.
+*            ASSERT 1 = 2.
+*        ENDCASE.
+*
+*************************************************************************
+** Finish processing
+*************************************************************************
+*        COMMIT WORK AND WAIT.
+*
+*      CATCH lcx_exception.                              "#EC NO_HANDLER
+*    ENDTRY.
+*
+*************************************************************************
+** Get the messages from the ABAPGIT logs
+*************************************************************************
+*    LOOP AT me->mt_package_data[] ASSIGNING <ls_package_data>.
+*      IF <ls_package_data>-o_abapgit_log IS NOT BOUND.
+*        CONTINUE.
+*      ENDIF.
+*      lt_abapgit_msg[] = <ls_package_data>-o_abapgit_log->get_messages( ).
+*      LOOP AT lt_abapgit_msg[] ASSIGNING <ls_abapgit_msg>.
+*        lv_text200 = <ls_abapgit_msg>-text.
+*        MESSAGE e000(zdbe_tools) WITH lv_text200+0(50) lv_text200+50(50) lv_text200+100(50) lv_text200+150(50) INTO lv_dummy.
+*        CASE <ls_abapgit_msg>-type.
+*          WHEN 'I' OR 'S'.
+*            CONTINUE.
+*          WHEN 'W'.
+*            sy-msgty = 'W'.
+*          WHEN OTHERS.
+*            sy-msgty = 'E'.
+*        ENDCASE.
+*        me->mo_log->add_symsg( ).
+*      ENDLOOP.
+*      UNASSIGN <ls_abapgit_msg>.
+*    ENDLOOP.
+*    UNASSIGN <ls_package_data>.
+*
+*************************************************************************
+** Show all messages
+*************************************************************************
+*    me->show_log( ).
+*
+*  ENDMETHOD.
+*
+*************************************************************************
+**  Description.......: Replace the occurences of P_ID_OLD with P_ID_NEW
+**
+**  Author............: Mariusz Kakol
+**  Company...........: Proaxia
+**  Creation Date.....: 2019.11.27
+**
+*************************************************************************
+**  Changed on:  Changed by:   Change ID:  Description:
+**
+**  2019.11.27   M.Kakol                   First ver.
+*************************************************************************
+*  METHOD replace_namespace_str.
+*    FIELD-SYMBOLS:
+*      <ls_mapping> LIKE LINE OF me->mt_mapping_values[].
+*
+*************************************************************************
+** Initialize
+*************************************************************************
+*    ev_changed = abap_false.
+*    ev_contains_src_id = abap_false.
+*    ev_contains_dst_id = abap_false.
+*
+*    IF me->mt_mapping_values[] IS INITIAL.
+*      RETURN.
+*    ENDIF.
+*
+*
+*    IF cv_data IS INITIAL.
+*      RETURN.
+*    ENDIF.
+*
+*************************************************************************
+** Do the replacement
+*************************************************************************
+*    IF iv_replace = abap_true.
+*      LOOP AT me->mt_mapping_values[] ASSIGNING <ls_mapping>.
+*        REPLACE ALL OCCURRENCES OF <ls_mapping>-name_src IN cv_data WITH <ls_mapping>-name_tmp IGNORING CASE.
+*        CASE sy-subrc.
+*          WHEN 0.
+*            ev_changed = abap_true. "The search pattern or specified section was replaced by the content of new and the result is available in full in dobj.
+*          WHEN 2.
+*            ASSERT 1 = 2. "The search pattern or specified section was replaced by the content of new in dobj and the result of the replacement was truncated on the right.
+*          WHEN 4.
+*            "The search pattern in pattern was not found in dobj in the pattern-based search.
+*          WHEN OTHERS.
+*            ASSERT 1 = 2. "The operands pattern or new do not contain interpretable double-byte characters.
+*        ENDCASE.
+*      ENDLOOP.
+*      UNASSIGN <ls_mapping>.
+*      LOOP AT mt_mapping_values[] ASSIGNING <ls_mapping>.
+*        REPLACE ALL OCCURRENCES OF <ls_mapping>-name_tmp IN cv_data WITH <ls_mapping>-name_dst.
+*        CASE sy-subrc.
+*          WHEN 0.
+*            "The search pattern or specified section was replaced by the content of new and the result is available in full in dobj.
+*          WHEN 2.
+*            ASSERT 1 = 2. "The search pattern or specified section was replaced by the content of new in dobj and the result of the replacement was truncated on the right.
+*          WHEN 4.
+*            "The search pattern in pattern was not found in dobj in the pattern-based search.
+*          WHEN OTHERS.
+*            ASSERT 1 = 2. "The operands pattern or new do not contain interpretable double-byte characters.
+*        ENDCASE.
+*      ENDLOOP.
+*      UNASSIGN <ls_mapping>.
+*    ENDIF.
+*
+*************************************************************************
+** If we did the replacement (at least one), then we know, that both old and new ID have occured
+** If the replacement didn't take place, then in addition we want to return to the caller the information
+** if the text to be processed contains the old or new ID
+*************************************************************************
+*    IF ev_changed = abap_true.
+*      ev_contains_src_id = abap_true.
+*      ev_contains_dst_id = abap_true.
+*    ELSE.
+*      IF ev_contains_src_id IS SUPPLIED.
+*        LOOP AT me->mt_mapping_values[] ASSIGNING <ls_mapping>.
+*          FIND FIRST OCCURRENCE OF <ls_mapping>-name_src IN cv_data.
+*          IF sy-subrc = 0.
+*            ev_contains_src_id = abap_true.
+*            EXIT.
+*          ENDIF.
+*        ENDLOOP.
+*        UNASSIGN <ls_mapping>.
+*      ENDIF.
+*
+*      IF ev_contains_dst_id IS SUPPLIED.
+*        LOOP AT me->mt_mapping_values[] ASSIGNING <ls_mapping>.
+*          FIND FIRST OCCURRENCE OF <ls_mapping>-name_dst IN cv_data.
+*          IF sy-subrc = 0.
+*            ev_contains_dst_id = abap_true.
+*            EXIT.
+*          ENDIF.
+*        ENDLOOP.
+*        UNASSIGN <ls_mapping>.
+*      ENDIF.
+*    ENDIF.
+*
+*
+*  ENDMETHOD.
+*
+*************************************************************************
+**  Description.......: Trace the content of the given XML file
+**
+**  Author............: Mariusz Kakol
+**  Company...........: Proaxia
+**  Creation Date.....: 2019.11.27
+**
+*************************************************************************
+**  Changed on:  Changed by:   Change ID:  Description:
+**
+**  2019.11.27   M.Kakol                   First ver.
+*************************************************************************
+*  METHOD trace_xml.
+*    DATA:
+*      lt_data             TYPE STANDARD TABLE OF string WITH NON-UNIQUE DEFAULT KEY,
+*      lv_data             LIKE LINE OF lt_data[],
+*      lv_local_prefix_txt TYPE text20,
+*      lv_highlight        TYPE abap_bool.
+*
+*    SPLIT iv_data AT cl_abap_char_utilities=>cr_lf+1(1) INTO TABLE lt_data[].
+*
+*    IF iv_local = abap_true.
+*      lv_local_prefix_txt = 'Local object :'.               "#EC NOTEXT
+*    ELSE.
+*      lv_local_prefix_txt = 'Remote object:'.               "#EC NOTEXT
+*    ENDIF.
+*
+*    FORMAT COLOR COL_POSITIVE INTENSIFIED OFF.
+*    WRITE :/ lv_local_prefix_txt, is_tadir-object, is_tadir-obj_name, iv_filename.
+*
+*    IF p_trc_di = abap_true.
+*      RETURN.
+*    ENDIF.
+*
+*    LOOP AT lt_data[] INTO lv_data.
+*
+*      lv_highlight = abap_false.
+*      IF iv_local = abap_true.
+*        me->replace_namespace_str(
+*          EXPORTING
+*            iv_replace         = abap_false
+*          IMPORTING
+*            ev_contains_src_id = lv_highlight
+*          CHANGING
+*            cv_data            = lv_data ).
+*      ELSE.
+*        me->replace_namespace_str(
+*          EXPORTING
+*            iv_replace         = abap_false
+*          IMPORTING
+*            ev_contains_dst_id = lv_highlight
+*          CHANGING
+*            cv_data            = lv_data ).
+*      ENDIF.
+*      IF lv_highlight = abap_false AND p_trc_da = abap_false.
+*        CONTINUE.
+*      ENDIF.
+*      IF lv_highlight = abap_true.
+*        FORMAT COLOR COL_TOTAL INTENSIFIED OFF.
+*      ELSE.
+*        FORMAT COLOR COL_BACKGROUND INTENSIFIED OFF.
+*      ENDIF.
+*      WRITE :/ lv_data.
+*    ENDLOOP.
+*  ENDMETHOD.
+*ENDCLASS.
+*
+*************************************************************************
+**  Description.......: Handle END-OF-SELECTION event
+**
+**  Author............: Mariusz Kakol
+**  Company...........: Proaxia
+**  Creation Date.....: 2019.11.27
+**
+*************************************************************************
+**  Changed on:  Changed by:   Change ID:  Description:
+**
+**  2019.11.27   M.Kakol                   First ver.
+*************************************************************************
+*FORM on_end_of_selection.
+*  DATA:
+*    lo_app_controller TYPE REF TO lcl_app_controller.
+*
+*  CREATE OBJECT lo_app_controller.
+*
+*  lo_app_controller->main( ).
+*ENDFORM.
+*
+*END-OF-SELECTION.
+*  PERFORM on_end_of_selection.
